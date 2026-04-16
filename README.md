@@ -32,8 +32,8 @@ SchedulAI is an intelligent, constraint-based timetable generation system built 
 - **Constraint Management**: Hard and soft constraints for complete scheduling control
 - **Multi-Role Support**: Admin, HOD, Professor, and Coordinator roles with specific permissions
 - **Real-Time Validation**: Instant conflict detection and validation
-- **Batch Generation**: Generate multiple timetable variations and compare
-- **Export Capabilities**: Export schedules to multiple formats
+- **Smart Assignment Fallback**: Auto-maps courses to professors during generation when assignments are missing
+- **Export Capabilities**: Export schedules as PDF (visual weekly grid format)
 
 ### Constraint Types
 - **Hard Constraints** (must be satisfied):
@@ -56,7 +56,7 @@ SchedulAI is an intelligent, constraint-based timetable generation system built 
 
 ## Tech Stack
 
-- **Frontend**: Next.js 15, React 19, TypeScript, Tailwind CSS
+- **Frontend**: Next.js 16, React 19, TypeScript, Tailwind CSS
 - **Backend**: Next.js API Routes, Node.js
 - **Database**: Supabase (PostgreSQL) with Row Level Security
 - **Authentication**: Supabase Auth
@@ -75,6 +75,7 @@ schedulai/
 │   │   ├── callback/route.ts
 │   │   └── error/page.tsx
 │   ├── api/                     # API routes
+│   │   ├── course-assignments/route.ts
 │   │   ├── departments/route.ts
 │   │   ├── courses/route.ts
 │   │   ├── professors/route.ts
@@ -94,6 +95,7 @@ schedulai/
 │   │   ├── professors/page.tsx
 │   │   └── rooms/page.tsx
 │   ├── layout.tsx
+│   ├── not-found.tsx            # Custom 404 page
 │   └── page.tsx                 # Landing page
 ├── components/
 │   ├── dashboard/               # Dashboard components
@@ -110,6 +112,8 @@ schedulai/
 │   │   ├── server.ts           # Supabase server client
 │   │   ├── middleware.ts       # Session middleware
 │   │   └── types.ts            # TypeScript types
+│   ├── ai/
+│   │   └── groq.ts             # Optional Groq config optimization
 │   ├── timetable/
 │   │   ├── types.ts            # Timetable data types
 │   │   ├── constraints.ts      # Constraint validation
@@ -150,11 +154,7 @@ pnpm install
 ```
 
 3. **Set up environment variables**
-```bash
-cp .env.example .env.local
-```
-
-Fill in your Supabase credentials:
+Create `.env.local` and fill in your values:
 ```env
 NEXT_PUBLIC_SUPABASE_URL=https://your-project.supabase.co
 NEXT_PUBLIC_SUPABASE_ANON_KEY=your-anon-key
@@ -215,7 +215,7 @@ pnpm dev
 - `professors` - Faculty members
 - `rooms` - Classrooms and facilities
 - `student_groups` - Cohorts and sections
-- `course_assignments` - Maps courses to professors and student groups
+- `course_assignments` - Maps courses to professors
 - `timetables` - Generated schedules
 - `timetable_slots` - Individual time slots in schedules
 - `constraints` - Custom scheduling constraints
@@ -252,11 +252,11 @@ The system uses a **genetic algorithm** with the following approach:
 **Configuration Parameters:**
 ```typescript
 {
-  populationSize: 100,      // Population per generation
-  mutationRate: 0.15,       // 15% mutation probability
+   populationSize: 50,       // Population per generation
+   mutationRate: 0.1,        // Mutation probability
   crossoverRate: 0.8,       // 80% crossover probability
-  maxIterations: 500,       // Maximum generations
-  elitismRate: 0.1,         // Keep top 10% unchanged
+   maxIterations: 1000,      // Maximum generations
+   elitismCount: 5,          // Keep top N unchanged
 }
 ```
 
@@ -297,45 +297,38 @@ COORDINATOR
 ## API Routes
 
 ### Authentication
-- `POST /auth/login` - Email/password login
-- `POST /auth/sign-up` - New user registration
-- `GET /auth/callback` - OAuth callback handler
+- `GET /auth/callback` - Auth callback handler
 
 ### Departments
-- `GET /api/departments` - List departments (with pagination)
-- `POST /api/departments` - Create department (admin/hod)
-- `GET /api/departments/[id]` - Get department details
-- `PATCH /api/departments/[id]` - Update department
-- `DELETE /api/departments/[id]` - Delete department
+- `GET /api/departments` - List departments
+- `POST /api/departments` - Create department
 
 ### Courses
 - `GET /api/courses` - List courses
 - `POST /api/courses` - Create course
-- `GET /api/courses/[id]` - Get course details
-- `PATCH /api/courses/[id]` - Update course
-- `DELETE /api/courses/[id]` - Delete course
 
 ### Professors
 - `GET /api/professors` - List professors
 - `POST /api/professors` - Create professor
-- `GET /api/professors/[id]` - Get professor details
-- `PATCH /api/professors/[id]` - Update professor
-- `DELETE /api/professors/[id]` - Delete professor
 
 ### Rooms
 - `GET /api/rooms` - List rooms
 - `POST /api/rooms` - Create room
-- `GET /api/rooms/[id]` - Get room details
-- `PATCH /api/rooms/[id]` - Update room
-- `DELETE /api/rooms/[id]` - Delete room
+
+### Student Groups
+- `GET /api/student-groups` - List student groups
+- `POST /api/student-groups` - Create student group
+
+### Course Assignments
+- `GET /api/course-assignments` - List assignments (supports `courseId` and `professorId` query)
+- `POST /api/course-assignments` - Assign professor to course
+- `DELETE /api/course-assignments?id=<assignmentId>` - Remove assignment
 
 ### Timetables
 - `GET /api/timetables` - List timetables
 - `POST /api/timetables` - Create timetable
 - `GET /api/timetables/[id]` - Get timetable details
-- `PATCH /api/timetables/[id]` - Update timetable
-- `DELETE /api/timetables/[id]` - Delete timetable
-- `POST /api/timetables/[id]/generate` - Generate schedule using AI
+- `POST /api/timetables/[id]/generate` - Generate schedule using algorithm + optional Groq optimization
 
 ## Usage
 
@@ -360,29 +353,22 @@ COORDINATOR
    - Go to Dashboard → Courses → Add courses with credits and time requirements
 
 2. **Create Timetable**:
-   - Click "Create New Timetable"
+   - Go to Dashboard → Generate
    - Name the timetable (e.g., "Spring 2025")
-   - Set semester and year
-   - Configure available time slots (days and hours)
+   - Set semester, academic year, and department
+   - Optional: Enable Groq AI optimization and provide custom instruction
 
-3. **Add Constraints**:
-   - Select courses to include
-   - Assign professors to courses
-   - Assign student groups
-   - Set room preferences
-   - Add custom constraints (optional)
-
-4. **Generate Schedule**:
+3. **Generate Schedule**:
    - Click "Generate" button
-   - System runs genetic algorithm
-   - Monitor progress in real-time
+   - System runs genetic algorithm (with optional AI config tuning)
+   - If no course assignments exist, generation can auto-assign professors as fallback
    - View generated timetable
    - Option to regenerate with different parameters
 
-5. **Review & Finalize**:
+4. **Review & Finalize**:
    - View conflicts and score
    - Manually adjust if needed
-   - Export to PDF/Excel
+   - Export to PDF (weekly grid format)
    - Publish to system
 
 ### Managing Data
@@ -394,7 +380,7 @@ COORDINATOR
 
 **Courses:**
 - Add courses with credits and prerequisites
-- Assign professors (can have multiple instructors)
+- Assign professors from Courses page (`Assign` action)
 - Set minimum time slots per week
 - Specify preferred time slots
 
@@ -450,6 +436,7 @@ NEXT_PUBLIC_VERCEL_ANALYTICS_ID=your-analytics-id
 - Check that rooms have sufficient capacity
 - Verify constraints are satisfiable
 - Try with fewer courses or more available slots
+- Check diagnostics in generation error message for missing inputs (courses, groups, assignments)
 
 ### Database connection errors
 - Verify Supabase credentials in `.env.local`
