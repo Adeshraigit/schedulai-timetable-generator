@@ -67,7 +67,7 @@ export function TimetablePreview() {
       </div>
       
       <div className="overflow-x-auto">
-        <div className="min-w-[700px] p-4 sm:p-6">
+        <div className="min-w-175 p-4 sm:p-6">
           <div className="grid grid-cols-6 gap-2">
             {/* Header row */}
             <div className="p-2" />
@@ -79,14 +79,14 @@ export function TimetablePreview() {
 
             {/* Time slots */}
             {timeSlots.map((time) => (
-              <>
-                <div key={`time-${time}`} className="flex items-center p-2">
+              <div key={`row-${time}`} className="contents">
+                <div className="flex items-center p-2">
                   <span className="text-xs font-medium text-muted-foreground">{time}</span>
                 </div>
                 {days.map((day) => {
                   const slot = scheduleData[day]?.[time]
                   return (
-                    <div key={`${day}-${time}`} className="min-h-[70px] p-1">
+                    <div key={`${day}-${time}`} className="min-h-17.5 p-1">
                       {slot ? (
                         <div className={`h-full rounded-lg border p-2 transition-all hover:scale-[1.02] hover:shadow-md ${slot.color}`}>
                           <p className="text-xs font-semibold leading-tight">{slot.subject}</p>
@@ -99,7 +99,7 @@ export function TimetablePreview() {
                     </div>
                   )
                 })}
-              </>
+              </div>
             ))}
           </div>
         </div>

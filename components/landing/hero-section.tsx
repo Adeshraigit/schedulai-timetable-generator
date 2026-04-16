@@ -27,7 +27,7 @@ export function HeroSection() {
 
           <h1 className="max-w-4xl text-balance text-4xl font-semibold leading-tight tracking-tight text-foreground sm:text-5xl lg:text-6xl">
             Generate Conflict-Free Timetables in{" "}
-            <span className="bg-gradient-to-r from-primary to-blue-400 bg-clip-text text-transparent">
+            <span className="bg-linear-to-r from-primary to-blue-400 bg-clip-text text-transparent">
               Minutes, Not Days
             </span>
           </h1>
