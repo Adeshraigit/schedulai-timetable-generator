@@ -121,14 +121,33 @@ export async function POST(
     }
 
     const safeAssignments = assignments ?? [];
-    const assignmentsByCourse = new Map<string, typeof safeAssignments>();
-    for (const assignment of safeAssignments) {
+    let autoAssignmentUsed = false;
+    let effectiveAssignments = safeAssignments;
+
+    if (safeAssignments.length === 0 && professors.length > 0) {
+      autoAssignmentUsed = true;
+      effectiveAssignments = courses.map((course, idx) => {
+        const professor = professors[idx % professors.length];
+        return {
+          id: `auto-${course.id}-${professor.id}`,
+          course_id: course.id,
+          professor_id: professor.id,
+          professors: {
+            id: professor.id,
+            name: professor.name,
+          },
+        };
+      });
+    }
+
+    const assignmentsByCourse = new Map<string, typeof effectiveAssignments>();
+    for (const assignment of effectiveAssignments) {
       const list = assignmentsByCourse.get(assignment.course_id) ?? [];
       list.push(assignment);
       assignmentsByCourse.set(assignment.course_id, list);
     }
 
-    if (safeAssignments.length === 0) {
+    if (effectiveAssignments.length === 0) {
       await supabase.from('timetables').update({ status: 'draft' }).eq('id', id);
       return NextResponse.json(
         {
@@ -183,11 +202,12 @@ export async function POST(
             'No schedulable requirements found. Check course semester alignment, student groups, and course hour settings.',
           diagnostics: {
             courseCount: courses.length,
-            assignmentCount: safeAssignments.length,
+            assignmentCount: effectiveAssignments.length,
             studentGroupCount: studentGroups.length,
             courseRequirementCount: courseRequirements.length,
             totalRequestedHours,
             usedYearFallback,
+            autoAssignmentUsed,
           },
         },
         { status: 400 }
@@ -284,6 +304,7 @@ export async function POST(
             hardViolations: result.hardViolations,
             softViolations: result.softViolations,
             usedYearFallback,
+            autoAssignmentUsed,
           },
         },
         { status: 400 }
@@ -299,7 +320,7 @@ export async function POST(
       soft_violations: result.softViolations,
       message: result.success
         ? `Generated successfully in ${result.generationTime}ms`
-        : `Generated with ${result.hardViolations} hard violations${usedYearFallback ? ' (student-group year fallback used)' : ''}`,
+        : `Generated with ${result.hardViolations} hard violations${usedYearFallback ? ' (student-group year fallback used)' : ''}${autoAssignmentUsed ? ' (auto-assigned professors)' : ''}`,
     });
 
     await supabase.from('timetable_slots').delete().eq('timetable_id', id);
@@ -341,6 +362,7 @@ export async function POST(
       aiUsed: useAI,
       aiApplied,
       aiNotes,
+      autoAssignmentUsed,
       effectiveConfig: {
         maxIterations: config.maxIterations,
         populationSize: config.populationSize,

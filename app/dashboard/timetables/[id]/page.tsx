@@ -1,6 +1,7 @@
 'use client';
 
 import { use } from 'react';
+import { useRef, useState } from 'react';
 import useSWR from 'swr';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -61,11 +62,84 @@ export default function TimetableViewPage({
 }: {
   params: Promise<{ id: string }>;
 }) {
+  const [isExporting, setIsExporting] = useState(false);
+  const gridExportRef = useRef<HTMLDivElement | null>(null);
   const { id } = use(params);
   const { data: timetable, error, isLoading } = useSWR<Timetable>(
     `/api/timetables/${id}`,
     fetcher
   );
+
+  const handleExportPdf = async () => {
+    if (!timetable || isExporting || !gridExportRef.current) return;
+
+    setIsExporting(true);
+    try {
+      const [{ jsPDF }, { toPng }] = await Promise.all([
+        import('jspdf'),
+        import('html-to-image'),
+      ]);
+
+      const imageData = await toPng(gridExportRef.current, {
+        cacheBust: true,
+        pixelRatio: 2,
+        backgroundColor: '#ffffff',
+      });
+
+      const img = new Image();
+      await new Promise<void>((resolve, reject) => {
+        img.onload = () => resolve();
+        img.onerror = () => reject(new Error('Failed to load generated image'));
+        img.src = imageData;
+      });
+
+      const doc = new jsPDF({ orientation: 'landscape', unit: 'pt', format: 'a4' });
+      const pageWidth = doc.internal.pageSize.getWidth();
+      const pageHeight = doc.internal.pageSize.getHeight();
+      const marginX = 24;
+      const marginY = 20;
+      const maxImageWidth = pageWidth - marginX * 2;
+      const maxImageHeight = pageHeight - 110;
+
+      doc.setFontSize(18);
+      doc.text(`Timetable: ${timetable.name}`, marginX, 40);
+
+      doc.setFontSize(11);
+      doc.text(
+        `${timetable.semester} ${timetable.academicYear} - ${timetable.department.name}`,
+        marginX,
+        60
+      );
+      doc.text(`Status: ${timetable.status}`, marginX, 76);
+      doc.text(`Generated Slots: ${timetable.slots.length}`, marginX + 220, 76);
+
+      const imageRatio = img.width / img.height;
+
+      let renderWidth = maxImageWidth;
+      let renderHeight = renderWidth / imageRatio;
+      if (renderHeight > maxImageHeight) {
+        renderHeight = maxImageHeight;
+        renderWidth = renderHeight * imageRatio;
+      }
+
+      doc.addImage(
+        imageData,
+        'PNG',
+        (pageWidth - renderWidth) / 2,
+        95,
+        renderWidth,
+        renderHeight
+      );
+
+      const safeName = timetable.name.replace(/[^a-zA-Z0-9-_]/g, '_');
+      doc.save(`${safeName}_timetable.pdf`);
+    } catch (exportError) {
+      console.error('Failed to export PDF:', exportError);
+      alert('Failed to export PDF. Please try again.');
+    } finally {
+      setIsExporting(false);
+    }
+  };
 
   if (isLoading) {
     return (
@@ -124,9 +198,9 @@ export default function TimetableViewPage({
           >
             {timetable.status}
           </Badge>
-          <Button variant="outline">
+          <Button variant="outline" onClick={handleExportPdf} disabled={isExporting}>
             <Download className="mr-2 h-4 w-4" />
-            Export
+            {isExporting ? 'Exporting...' : 'Export PDF'}
           </Button>
           <Button>
             <Sparkles className="mr-2 h-4 w-4" />
@@ -190,7 +264,7 @@ export default function TimetableViewPage({
       </div>
 
       {/* Timetable Grid */}
-      <Card>
+      <Card ref={gridExportRef}>
         <CardHeader>
           <CardTitle>Weekly Schedule</CardTitle>
           <CardDescription>View the complete timetable grid</CardDescription>

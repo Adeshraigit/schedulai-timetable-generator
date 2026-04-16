@@ -56,9 +56,18 @@ interface Department {
   code: string;
 }
 
+interface Professor {
+  id: string;
+  name: string;
+  department: { id: string; name: string; code: string } | null;
+}
+
 export default function CoursesPage() {
   const [search, setSearch] = useState('');
   const [isDialogOpen, setIsDialogOpen] = useState(false);
+  const [assignmentError, setAssignmentError] = useState<string | null>(null);
+  const [assigningCourseId, setAssigningCourseId] = useState<string | null>(null);
+  const [selectedProfessorByCourse, setSelectedProfessorByCourse] = useState<Record<string, string>>({});
   const [formData, setFormData] = useState({
     name: '',
     code: '',
@@ -76,6 +85,7 @@ export default function CoursesPage() {
     fetcher
   );
   const { data: departments } = useSWR<Department[]>('/api/departments', fetcher);
+  const { data: professors } = useSWR<Professor[]>('/api/professors', fetcher);
 
   const filteredCourses = courses?.filter(
     (course) =>
@@ -105,6 +115,37 @@ export default function CoursesPage() {
       departmentId: '',
     });
     mutate();
+  };
+
+  const handleAssignProfessor = async (course: Course) => {
+    const professorId = selectedProfessorByCourse[course.id];
+    if (!professorId) {
+      setAssignmentError('Please select a professor first');
+      return;
+    }
+
+    setAssignmentError(null);
+    setAssigningCourseId(course.id);
+
+    try {
+      const res = await fetch('/api/course-assignments', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ courseId: course.id, professorId }),
+      });
+
+      if (!res.ok) {
+        const data = await res.json();
+        throw new Error(data?.error || 'Failed to assign professor');
+      }
+
+      await mutate();
+      setSelectedProfessorByCourse((prev) => ({ ...prev, [course.id]: '' }));
+    } catch (err) {
+      setAssignmentError(err instanceof Error ? err.message : 'Failed to assign professor');
+    } finally {
+      setAssigningCourseId(null);
+    }
   };
 
   return (
@@ -276,6 +317,9 @@ export default function CoursesPage() {
               />
             </div>
           </div>
+          {assignmentError && (
+            <p className="text-sm text-destructive">{assignmentError}</p>
+          )}
         </CardHeader>
         <CardContent>
           {isLoading ? (
@@ -296,6 +340,7 @@ export default function CoursesPage() {
                   <TableHead>Credits</TableHead>
                   <TableHead>Hours (L/Lab/T)</TableHead>
                   <TableHead>Professor</TableHead>
+                  <TableHead className="w-[280px]">Assign</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -324,6 +369,43 @@ export default function CoursesPage() {
                       {course.assignments.length > 0
                         ? course.assignments.map((a) => a.professor.name).join(', ')
                         : '-'}
+                    </TableCell>
+                    <TableCell>
+                      <div className="flex items-center gap-2">
+                        <Select
+                          value={selectedProfessorByCourse[course.id] || ''}
+                          onValueChange={(value) =>
+                            setSelectedProfessorByCourse((prev) => ({
+                              ...prev,
+                              [course.id]: value,
+                            }))
+                          }
+                        >
+                          <SelectTrigger className="w-[180px]">
+                            <SelectValue placeholder="Select professor" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {(professors ?? [])
+                              .filter(
+                                (p) =>
+                                  !p.department || p.department.id === course.department.id
+                              )
+                              .map((professor) => (
+                                <SelectItem key={professor.id} value={professor.id}>
+                                  {professor.name}
+                                </SelectItem>
+                              ))}
+                          </SelectContent>
+                        </Select>
+                        <Button
+                          type="button"
+                          size="sm"
+                          onClick={() => handleAssignProfessor(course)}
+                          disabled={assigningCourseId === course.id}
+                        >
+                          {assigningCourseId === course.id ? 'Assigning...' : 'Assign'}
+                        </Button>
+                      </div>
                     </TableCell>
                   </TableRow>
                 ))}
