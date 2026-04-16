@@ -1,10 +1,6 @@
 import { createClient } from '@/lib/supabase/server'
-
-// User roles in order of privilege
-export type UserRole = 'admin' | 'hod' | 'professor' | 'coordinator'
-
-// Role hierarchy - higher index = more privileges
-const roleHierarchy: UserRole[] = ['coordinator', 'professor', 'hod', 'admin']
+import type { UserRole } from './roles'
+import { getAvailableActions, hasMinimumRole, roleLabels } from './roles'
 
 export interface UserProfile {
   id: string
@@ -38,15 +34,6 @@ export async function getCurrentUser(): Promise<UserProfile | null> {
     role: profile.role as UserRole,
     department_id: profile.department_id,
   }
-}
-
-/**
- * Check if user has at least the required role level
- */
-export function hasMinimumRole(userRole: UserRole, requiredRole: UserRole): boolean {
-  const userLevel = roleHierarchy.indexOf(userRole)
-  const requiredLevel = roleHierarchy.indexOf(requiredRole)
-  return userLevel >= requiredLevel
 }
 
 /**
@@ -134,30 +121,4 @@ export const permissions = {
   },
 }
 
-/**
- * Role display labels
- */
-export const roleLabels: Record<UserRole, string> = {
-  admin: 'Administrator',
-  hod: 'Head of Department',
-  professor: 'Professor',
-  coordinator: 'Coordinator',
-}
-
-/**
- * Get available actions for a role
- */
-export function getAvailableActions(role: UserRole) {
-  return {
-    canManageDepartments: role === 'admin',
-    canManageUsers: hasMinimumRole(role, 'hod'),
-    canManageCourses: hasMinimumRole(role, 'hod'),
-    canManageProfessors: hasMinimumRole(role, 'hod'),
-    canManageRooms: hasMinimumRole(role, 'hod'),
-    canCreateTimetables: hasMinimumRole(role, 'coordinator'),
-    canPublishTimetables: hasMinimumRole(role, 'hod'),
-    canDeleteTimetables: hasMinimumRole(role, 'hod'),
-    canCreateConstraints: hasMinimumRole(role, 'professor'),
-    canViewReports: hasMinimumRole(role, 'coordinator'),
-  }
-}
+export { getAvailableActions, hasMinimumRole, roleLabels }

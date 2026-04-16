@@ -3,7 +3,8 @@
 import { createContext, useContext, useEffect, useState, ReactNode } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { User } from '@supabase/supabase-js'
-import type { UserRole } from './rbac'
+import type { UserRole } from './roles'
+import { getAvailableActions } from './roles'
 
 interface UserProfile {
   id: string
@@ -138,21 +139,5 @@ export function useAvailableActions() {
     }
   }
 
-  const roleHierarchy: UserRole[] = ['coordinator', 'professor', 'hod', 'admin']
-  const hasMinimumRole = (role: UserRole, required: UserRole) => {
-    return roleHierarchy.indexOf(role) >= roleHierarchy.indexOf(required)
-  }
-
-  return {
-    canManageDepartments: profile.role === 'admin',
-    canManageUsers: hasMinimumRole(profile.role, 'hod'),
-    canManageCourses: hasMinimumRole(profile.role, 'hod'),
-    canManageProfessors: hasMinimumRole(profile.role, 'hod'),
-    canManageRooms: hasMinimumRole(profile.role, 'hod'),
-    canCreateTimetables: hasMinimumRole(profile.role, 'coordinator'),
-    canPublishTimetables: hasMinimumRole(profile.role, 'hod'),
-    canDeleteTimetables: hasMinimumRole(profile.role, 'hod'),
-    canCreateConstraints: hasMinimumRole(profile.role, 'professor'),
-    canViewReports: hasMinimumRole(profile.role, 'coordinator'),
-  }
+  return getAvailableActions(profile.role)
 }
