@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import prisma from '@/lib/prisma';
+import { createAdminClient } from '@/lib/supabase/admin';
 import {
   generateTimetable,
   type CourseRequirement,
@@ -14,125 +14,150 @@ export async function POST(
   request: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
+  const supabase = createAdminClient();
+  const { id } = await params;
+
   try {
-    const { id } = await params;
     const body = await request.json();
     const { config: userConfig } = body;
 
-    // Update timetable status to GENERATING
-    await prisma.timetable.update({
-      where: { id },
-      data: { status: 'GENERATING' },
-    });
+    await supabase.from('timetables').update({ status: 'generating' }).eq('id', id);
 
-    // Fetch timetable with department
-    const timetable = await prisma.timetable.findUnique({
-      where: { id },
-      include: { department: true },
-    });
+    const { data: timetable, error: timetableError } = await supabase
+      .from('timetables')
+      .select('*')
+      .eq('id', id)
+      .maybeSingle();
 
+    if (timetableError) throw timetableError;
     if (!timetable) {
-      return NextResponse.json(
-        { error: 'Timetable not found' },
-        { status: 404 }
-      );
+      return NextResponse.json({ error: 'Timetable not found' }, { status: 404 });
     }
 
-    // Fetch all required data
-    const [courses, professors, rooms, studentGroups, constraints] = await Promise.all([
-      prisma.course.findMany({
-        where: { departmentId: timetable.departmentId },
-        include: {
-          assignments: {
-            include: { professor: true },
-          },
-        },
-      }),
-      prisma.professor.findMany({
-        where: { departmentId: timetable.departmentId },
-      }),
-      prisma.room.findMany({
-        where: { departmentId: timetable.departmentId, isAvailable: true },
-      }),
-      prisma.studentGroup.findMany({
-        where: { academicYear: timetable.academicYear },
-      }),
-      prisma.constraint.findMany({
-        where: { isActive: true },
-      }),
-    ]);
+    const [coursesRes, assignmentsRes, professorsRes, roomsRes, studentGroupsRes, constraintsRes] =
+      await Promise.all([
+        supabase
+          .from('courses')
+          .select('*')
+          .eq('department_id', timetable.department_id),
+        supabase
+          .from('course_assignments')
+          .select('id, course_id, professor_id, professors(id, name)')
+          .in(
+            'course_id',
+            (
+              await supabase
+                .from('courses')
+                .select('id')
+                .eq('department_id', timetable.department_id)
+            ).data?.map((c) => c.id) ?? ['00000000-0000-0000-0000-000000000000']
+          ),
+        supabase
+          .from('professors')
+          .select('*')
+          .eq('department_id', timetable.department_id),
+        supabase
+          .from('rooms')
+          .select('*')
+          .eq('department_id', timetable.department_id)
+          .eq('is_available', true),
+        supabase
+          .from('student_groups')
+          .select('*')
+          .eq('academic_year', timetable.academic_year)
+          .eq('department_id', timetable.department_id),
+        supabase.from('constraints').select('*').eq('is_active', true),
+      ]);
 
-    // Transform data for the algorithm
+    if (coursesRes.error) throw coursesRes.error;
+    if (assignmentsRes.error) throw assignmentsRes.error;
+    if (professorsRes.error) throw professorsRes.error;
+    if (roomsRes.error) throw roomsRes.error;
+    if (studentGroupsRes.error) throw studentGroupsRes.error;
+    if (constraintsRes.error) throw constraintsRes.error;
+
+    const courses = coursesRes.data ?? [];
+    const assignments = assignmentsRes.data ?? [];
+    const professors = professorsRes.data ?? [];
+    const rooms = roomsRes.data ?? [];
+    const studentGroups = studentGroupsRes.data ?? [];
+    const constraints = constraintsRes.data ?? [];
+
+    const assignmentsByCourse = new Map<string, typeof assignments>();
+    for (const assignment of assignments) {
+      const list = assignmentsByCourse.get(assignment.course_id) ?? [];
+      list.push(assignment);
+      assignmentsByCourse.set(assignment.course_id, list);
+    }
+
     const courseRequirements: CourseRequirement[] = [];
-    
     for (const course of courses) {
-      for (const assignment of course.assignments) {
-        // For each course-professor assignment, create requirements for each student group of matching semester
-        const matchingGroups = studentGroups.filter(g => g.semester === course.semester);
-        
+      const courseAssignments = assignmentsByCourse.get(course.id) ?? [];
+      for (const assignment of courseAssignments) {
+        const matchingGroups = studentGroups.filter((g) => g.semester === course.semester);
+
         for (const group of matchingGroups) {
+          const professor = assignment.professors as { id: string; name: string } | null;
           courseRequirements.push({
             courseId: course.id,
             courseName: course.name,
             courseCode: course.code,
-            professorId: assignment.professorId,
-            professorName: assignment.professor.name,
+            professorId: assignment.professor_id,
+            professorName: professor?.name ?? 'Unknown',
             studentGroupId: group.id,
-            lectureHours: course.lectureHours,
-            labHours: course.labHours,
-            tutorialHours: course.tutorialHours,
-            requiresLab: course.requiresLab,
-            specialRoomType: course.specialRoomType,
+            lectureHours: course.lecture_hours,
+            labHours: course.lab_hours,
+            tutorialHours: course.tutorial_hours,
+            requiresLab: course.requires_lab,
+            specialRoomType: course.special_room_type,
             semester: course.semester,
           });
         }
       }
     }
 
-    const roomsInfo: RoomInfo[] = rooms.map(room => ({
+    const roomsInfo: RoomInfo[] = rooms.map((room) => ({
       id: room.id,
       name: room.name,
       code: room.code,
       capacity: room.capacity,
-      type: room.type,
-      hasComputers: room.hasComputers,
-      specialEquipment: room.specialEquipment ? JSON.parse(room.specialEquipment) : [],
+      type: room.type.toUpperCase(),
+      hasComputers: room.has_computers,
+      specialEquipment: Array.isArray(room.special_equipment) ? room.special_equipment : [],
     }));
 
-    const professorsInfo: ProfessorInfo[] = professors.map(prof => ({
+    const professorsInfo: ProfessorInfo[] = professors.map((prof) => ({
       id: prof.id,
       name: prof.name,
-      maxHoursPerDay: prof.maxHoursPerDay,
-      maxHoursPerWeek: prof.maxHoursPerWeek,
-      preferredDays: prof.preferredDays ? JSON.parse(prof.preferredDays) : [],
-      unavailableDays: prof.unavailableDays ? JSON.parse(prof.unavailableDays) : [],
-      preferredTimeSlots: prof.preferredTimeSlots ? JSON.parse(prof.preferredTimeSlots) : [],
+      maxHoursPerDay: prof.max_hours_per_day,
+      maxHoursPerWeek: prof.max_hours_per_week,
+      preferredDays: Array.isArray(prof.preferred_days) ? prof.preferred_days : [],
+      unavailableDays: Array.isArray(prof.unavailable_days) ? prof.unavailable_days : [],
+      preferredTimeSlots: Array.isArray(prof.preferred_time_slots) ? prof.preferred_time_slots : [],
     }));
 
-    const studentGroupsInfo: StudentGroupInfo[] = studentGroups.map(group => ({
+    const studentGroupsInfo: StudentGroupInfo[] = studentGroups.map((group) => ({
       id: group.id,
       name: group.name,
       code: group.code,
       semester: group.semester,
-      studentCount: group.studentCount,
+      studentCount: group.student_count,
     }));
 
-    const constraintsInfo: Constraint[] = constraints.map(c => ({
+    const constraintsInfo: Constraint[] = constraints.map((c) => ({
       id: c.id,
-      type: c.type,
-      priority: c.priority as 'LOW' | 'MEDIUM' | 'HIGH' | 'CRITICAL',
-      isHard: c.isHard,
-      parameters: JSON.parse(c.parameters),
-      courseId: c.courseId || undefined,
-      professorId: c.professorId || undefined,
-      roomId: c.roomId || undefined,
-      studentGroupId: c.studentGroupId || undefined,
+      type: c.type.toUpperCase(),
+      priority: String(c.priority).toUpperCase() as 'LOW' | 'MEDIUM' | 'HIGH' | 'CRITICAL',
+      isHard: c.is_hard,
+      parameters: (c.parameters as Record<string, unknown>) ?? {},
+      courseId: c.course_id || undefined,
+      professorId: c.professor_id || undefined,
+      roomId: c.room_id || undefined,
+      studentGroupId: c.student_group_id || undefined,
     }));
 
-    // Merge user config with defaults
     const config = { ...DEFAULT_CONFIG, ...userConfig };
 
-    // Generate timetable
     const result = await generateTimetable(
       courseRequirements,
       roomsInfo,
@@ -142,52 +167,45 @@ export async function POST(
       config
     );
 
-    // Log generation result
-    await prisma.generationLog.create({
-      data: {
-        timetableId: id,
-        status: result.success ? 'SUCCESS' : 'PARTIAL',
-        iteration: result.iterations,
-        score: result.score,
-        hardViolations: result.hardViolations,
-        softViolations: result.softViolations,
-        message: result.success
-          ? `Generated successfully in ${result.generationTime}ms`
-          : `Generated with ${result.hardViolations} hard violations`,
-      },
+    await supabase.from('generation_logs').insert({
+      timetable_id: id,
+      status: result.success ? 'SUCCESS' : 'PARTIAL',
+      iteration: result.iterations,
+      score: result.score,
+      hard_violations: result.hardViolations,
+      soft_violations: result.softViolations,
+      message: result.success
+        ? `Generated successfully in ${result.generationTime}ms`
+        : `Generated with ${result.hardViolations} hard violations`,
     });
 
-    // Delete existing slots
-    await prisma.timetableSlot.deleteMany({
-      where: { timetableId: id },
-    });
+    await supabase.from('timetable_slots').delete().eq('timetable_id', id);
 
-    // Create new slots
     if (result.schedule.length > 0) {
-      await prisma.timetableSlot.createMany({
-        data: result.schedule.map(slot => ({
-          timetableId: id,
-          dayOfWeek: slot.timeSlot.dayOfWeek,
-          startTime: slot.timeSlot.startTime,
-          endTime: slot.timeSlot.endTime,
-          slotType: slot.slotType,
-          courseId: slot.courseId,
-          professorId: slot.professorId,
-          roomId: slot.roomId,
-          studentGroupId: slot.studentGroupId,
-        })),
-      });
+      const rows = result.schedule.map((slot) => ({
+        timetable_id: id,
+        day_of_week: slot.timeSlot.dayOfWeek,
+        start_time: slot.timeSlot.startTime,
+        end_time: slot.timeSlot.endTime,
+        slot_type: slot.slotType.toLowerCase(),
+        course_id: slot.courseId,
+        professor_id: slot.professorId,
+        room_id: slot.roomId,
+        student_group_id: slot.studentGroupId,
+      }));
+
+      const { error: slotInsertError } = await supabase.from('timetable_slots').insert(rows);
+      if (slotInsertError) throw slotInsertError;
     }
 
-    // Update timetable status
-    await prisma.timetable.update({
-      where: { id },
-      data: {
-        status: result.success ? 'GENERATED' : 'DRAFT',
+    await supabase
+      .from('timetables')
+      .update({
+        status: result.success ? 'generated' : 'draft',
         score: result.score,
         conflicts: result.hardViolations,
-      },
-    });
+      })
+      .eq('id', id);
 
     return NextResponse.json({
       success: result.success,
@@ -196,17 +214,11 @@ export async function POST(
       softViolations: result.softViolations,
       slotsCreated: result.schedule.length,
       generationTime: result.generationTime,
-      conflicts: result.conflicts.slice(0, 10), // Return first 10 conflicts
+      conflicts: result.conflicts.slice(0, 10),
     });
   } catch (error) {
     console.error('Failed to generate timetable:', error);
-
-    // Reset status on error
-    const { id } = await params;
-    await prisma.timetable.update({
-      where: { id },
-      data: { status: 'DRAFT' },
-    });
+    await supabase.from('timetables').update({ status: 'draft' }).eq('id', id);
 
     return NextResponse.json(
       { error: 'Failed to generate timetable', details: String(error) },

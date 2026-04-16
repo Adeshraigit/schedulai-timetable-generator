@@ -1,25 +1,54 @@
 import { NextResponse } from 'next/server';
-import prisma from '@/lib/prisma';
+import { createAdminClient } from '@/lib/supabase/admin';
 
 export async function GET(request: Request) {
   try {
+    const supabase = createAdminClient();
     const { searchParams } = new URL(request.url);
     const departmentId = searchParams.get('departmentId');
     const type = searchParams.get('type');
 
-    const where: Record<string, unknown> = {};
-    if (departmentId) where.departmentId = departmentId;
-    if (type) where.type = type;
+    let query = supabase.from('rooms').select('*').order('code', { ascending: true });
+    if (departmentId) query = query.eq('department_id', departmentId);
+    if (type) query = query.eq('type', type.toLowerCase());
 
-    const rooms = await prisma.room.findMany({
-      where,
-      include: {
-        department: true,
-      },
-      orderBy: { code: 'asc' },
+    const { data: rooms, error } = await query;
+    if (error) throw error;
+
+    const departmentIds = Array.from(new Set((rooms ?? []).map((r) => r.department_id)));
+    const { data: departments, error: departmentsError } =
+      departmentIds.length > 0
+        ? await supabase.from('departments').select('id, name, code').in('id', departmentIds)
+        : { data: [], error: null };
+
+    if (departmentsError) throw departmentsError;
+    const departmentMap = new Map((departments ?? []).map((d) => [d.id, d]));
+
+    const result = (rooms ?? []).map((room) => {
+      const department = departmentMap.get(room.department_id);
+      return {
+        id: room.id,
+        name: room.name,
+        code: room.code,
+        capacity: room.capacity,
+        type: room.type.toUpperCase(),
+        hasProjector: room.has_projector,
+        hasAC: room.has_ac,
+        hasComputers: room.has_computers,
+        specialEquipment: room.special_equipment,
+        building: room.building,
+        floor: room.floor,
+        isAvailable: room.is_available,
+        departmentId: room.department_id,
+        createdAt: room.created_at,
+        updatedAt: room.updated_at,
+        department: department
+          ? { id: department.id, name: department.name, code: department.code }
+          : null,
+      };
     });
 
-    return NextResponse.json(rooms);
+    return NextResponse.json(result);
   } catch (error) {
     console.error('Failed to fetch rooms:', error);
     return NextResponse.json(
@@ -31,6 +60,7 @@ export async function GET(request: Request) {
 
 export async function POST(request: Request) {
   try {
+    const supabase = createAdminClient();
     const body = await request.json();
     const {
       name,
@@ -53,26 +83,55 @@ export async function POST(request: Request) {
       );
     }
 
-    const room = await prisma.room.create({
-      data: {
+    const { data: room, error } = await supabase
+      .from('rooms')
+      .insert({
         name,
         code,
         capacity,
-        type: type || 'LECTURE_HALL',
-        hasProjector: hasProjector ?? true,
-        hasAC: hasAC || false,
-        hasComputers: hasComputers || false,
-        specialEquipment: specialEquipment ? JSON.stringify(specialEquipment) : null,
-        building,
-        floor,
-        departmentId,
-      },
-      include: {
-        department: true,
-      },
-    });
+        type: (type || 'LECTURE_HALL').toLowerCase(),
+        has_projector: hasProjector ?? true,
+        has_ac: hasAC || false,
+        has_computers: hasComputers || false,
+        special_equipment: specialEquipment || null,
+        building: building || null,
+        floor: floor || null,
+        department_id: departmentId,
+      })
+      .select('*')
+      .single();
 
-    return NextResponse.json(room, { status: 201 });
+    if (error) throw error;
+
+    const { data: department } = await supabase
+      .from('departments')
+      .select('id, name, code')
+      .eq('id', room.department_id)
+      .maybeSingle();
+
+    return NextResponse.json(
+      {
+        id: room.id,
+        name: room.name,
+        code: room.code,
+        capacity: room.capacity,
+        type: room.type.toUpperCase(),
+        hasProjector: room.has_projector,
+        hasAC: room.has_ac,
+        hasComputers: room.has_computers,
+        specialEquipment: room.special_equipment,
+        building: room.building,
+        floor: room.floor,
+        isAvailable: room.is_available,
+        departmentId: room.department_id,
+        createdAt: room.created_at,
+        updatedAt: room.updated_at,
+        department: department
+          ? { id: department.id, name: department.name, code: department.code }
+          : null,
+      },
+      { status: 201 }
+    );
   } catch (error) {
     console.error('Failed to create room:', error);
     return NextResponse.json(

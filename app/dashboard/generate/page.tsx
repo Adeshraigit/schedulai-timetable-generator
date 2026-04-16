@@ -27,7 +27,16 @@ import {
   Zap,
 } from 'lucide-react';
 
-const fetcher = (url: string) => fetch(url).then((res) => res.json());
+const fetcher = async (url: string) => {
+  const res = await fetch(url);
+  const data = await res.json();
+
+  if (!res.ok) {
+    throw new Error(data?.error || 'Request failed');
+  }
+
+  return data;
+};
 
 interface Department {
   id: string;
@@ -58,7 +67,11 @@ export default function GeneratePage() {
   const [result, setResult] = useState<GenerationResult | null>(null);
   const [error, setError] = useState<string | null>(null);
 
-  const { data: departments } = useSWR<Department[]>('/api/departments', fetcher);
+  const { data: departments, error: departmentsError } = useSWR<Department[]>(
+    '/api/departments',
+    fetcher
+  );
+  const departmentOptions = Array.isArray(departments) ? departments : [];
 
   const handleGenerate = async () => {
     if (!name || !semester || !departmentId) {
@@ -193,13 +206,16 @@ export default function GeneratePage() {
                   <SelectValue placeholder="Select department" />
                 </SelectTrigger>
                 <SelectContent>
-                  {departments?.map((dept) => (
+                  {departmentOptions.map((dept) => (
                     <SelectItem key={dept.id} value={dept.id}>
                       {dept.name} ({dept.code})
                     </SelectItem>
                   ))}
                 </SelectContent>
               </Select>
+              {departmentsError && (
+                <p className="text-sm text-destructive">Failed to load departments</p>
+              )}
             </div>
 
             <div className="flex items-center justify-between rounded-lg border border-border p-4">

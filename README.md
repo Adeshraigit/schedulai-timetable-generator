@@ -60,7 +60,7 @@ SchedulAI is an intelligent, constraint-based timetable generation system built 
 - **Backend**: Next.js API Routes, Node.js
 - **Database**: Supabase (PostgreSQL) with Row Level Security
 - **Authentication**: Supabase Auth
-- **ORM**: Prisma (for local SQLite) + Direct Supabase queries
+- **Data Access**: Supabase client (server/admin + browser clients)
 - **Algorithm**: Custom Genetic Algorithm implementation
 - **UI Components**: shadcn/ui
 
@@ -115,11 +115,7 @@ schedulai/
 │   │   ├── constraints.ts      # Constraint validation
 │   │   ├── generator.ts        # Genetic algorithm
 │   │   └── index.ts
-│   ├── prisma.ts
 │   └── utils.ts
-├── prisma/
-│   ├── schema.prisma           # Prisma schema (for local dev)
-│   └── seed.ts                 # Sample data
 ├── scripts/
 │   ├── 001_create_tables.sql   # Database schema
 │   ├── 002_enable_rls.sql      # Row Level Security policies
@@ -452,21 +448,6 @@ NEXT_PUBLIC_VERCEL_ANALYTICS_ID=your-analytics-id
 - Verify database hasn't exceeded connection limits
 
 ## Development
-
-### Running Prisma commands (local SQLite)
-```bash
-# Generate Prisma client
-pnpm db:generate
-
-# Apply migrations
-pnpm db:push
-
-# Open Prisma Studio
-pnpm db:studio
-
-# Seed database
-pnpm db:seed
-```
 
 ### Testing the Algorithm
 ```typescript
