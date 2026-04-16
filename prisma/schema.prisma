@@ -1,0 +1,315 @@
+// Prisma schema for SchedulAI - AI-Powered Timetable Generator
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+// ==================== USER MANAGEMENT ====================
+
+model User {
+  id        String   @id @default(cuid())
+  email     String   @unique
+  name      String
+  password  String
+  role      UserRole @default(COORDINATOR)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  department   Department? @relation(fields: [departmentId], references: [id])
+  departmentId String?
+
+  // Relations
+  createdTimetables Timetable[]
+  constraints       Constraint[]
+}
+
+enum UserRole {
+  ADMIN
+  HOD
+  PROFESSOR
+  COORDINATOR
+}
+
+// ==================== ACADEMIC STRUCTURE ====================
+
+model Department {
+  id        String   @id @default(cuid())
+  name      String
+  code      String   @unique
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Relations
+  users      User[]
+  courses    Course[]
+  professors Professor[]
+  rooms      Room[]
+  timetables Timetable[]
+}
+
+model Course {
+  id               String   @id @default(cuid())
+  name             String
+  code             String   @unique
+  credits          Int
+  lectureHours     Int      @default(3) // Hours per week
+  labHours         Int      @default(0)
+  tutorialHours    Int      @default(0)
+  semester         Int
+  requiresLab      Boolean  @default(false)
+  requiresSpecial  Boolean  @default(false) // Special equipment needed
+  specialRoomType  String?  // e.g., "computer_lab", "physics_lab"
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  department   Department @relation(fields: [departmentId], references: [id])
+  departmentId String
+
+  // Relations
+  assignments   CourseAssignment[]
+  timetableSlots TimetableSlot[]
+  constraints   Constraint[]
+}
+
+model Professor {
+  id                String   @id @default(cuid())
+  name              String
+  email             String   @unique
+  employeeId        String   @unique
+  maxHoursPerDay    Int      @default(6)
+  maxHoursPerWeek   Int      @default(20)
+  preferredDays     String?  // JSON array of preferred days
+  unavailableDays   String?  // JSON array of unavailable days
+  preferredTimeSlots String? // JSON array of preferred time slots
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  department   Department @relation(fields: [departmentId], references: [id])
+  departmentId String
+
+  // Relations
+  assignments    CourseAssignment[]
+  timetableSlots TimetableSlot[]
+  constraints    Constraint[]
+}
+
+model Room {
+  id              String   @id @default(cuid())
+  name            String
+  code            String   @unique
+  capacity        Int
+  type            RoomType @default(LECTURE_HALL)
+  hasProjector    Boolean  @default(true)
+  hasAC           Boolean  @default(false)
+  hasComputers    Boolean  @default(false)
+  specialEquipment String? // JSON array of special equipment
+  building        String?
+  floor           Int?
+  isAvailable     Boolean  @default(true)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  department   Department @relation(fields: [departmentId], references: [id])
+  departmentId String
+
+  // Relations
+  timetableSlots TimetableSlot[]
+  constraints    Constraint[]
+}
+
+enum RoomType {
+  LECTURE_HALL
+  SEMINAR_ROOM
+  COMPUTER_LAB
+  PHYSICS_LAB
+  CHEMISTRY_LAB
+  WORKSHOP
+  AUDITORIUM
+}
+
+model StudentGroup {
+  id             String   @id @default(cuid())
+  name           String
+  code           String   @unique
+  semester       Int
+  studentCount   Int
+  academicYear   String
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  // Relations
+  timetableSlots TimetableSlot[]
+  constraints    Constraint[]
+}
+
+// ==================== COURSE ASSIGNMENTS ====================
+
+model CourseAssignment {
+  id        String   @id @default(cuid())
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  course      Course    @relation(fields: [courseId], references: [id])
+  courseId    String
+  professor   Professor @relation(fields: [professorId], references: [id])
+  professorId String
+
+  @@unique([courseId, professorId])
+}
+
+// ==================== TIMETABLE ====================
+
+model Timetable {
+  id          String          @id @default(cuid())
+  name        String
+  semester    String
+  academicYear String
+  status      TimetableStatus @default(DRAFT)
+  isPublished Boolean         @default(false)
+  version     Int             @default(1)
+  score       Float?          // Optimization score
+  conflicts   Int             @default(0)
+  createdAt   DateTime        @default(now())
+  updatedAt   DateTime        @updatedAt
+
+  department   Department @relation(fields: [departmentId], references: [id])
+  departmentId String
+  createdBy    User       @relation(fields: [createdById], references: [id])
+  createdById  String
+
+  // Relations
+  slots TimetableSlot[]
+}
+
+enum TimetableStatus {
+  DRAFT
+  GENERATING
+  GENERATED
+  PUBLISHED
+  ARCHIVED
+}
+
+model TimetableSlot {
+  id        String   @id @default(cuid())
+  dayOfWeek Int      // 0 = Monday, 4 = Friday
+  startTime String   // "09:00"
+  endTime   String   // "10:00"
+  slotType  SlotType @default(LECTURE)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  timetable   Timetable @relation(fields: [timetableId], references: [id], onDelete: Cascade)
+  timetableId String
+  course      Course    @relation(fields: [courseId], references: [id])
+  courseId    String
+  professor   Professor @relation(fields: [professorId], references: [id])
+  professorId String
+  room        Room      @relation(fields: [roomId], references: [id])
+  roomId      String
+  studentGroup   StudentGroup @relation(fields: [studentGroupId], references: [id])
+  studentGroupId String
+
+  @@index([timetableId, dayOfWeek])
+  @@index([professorId, dayOfWeek])
+  @@index([roomId, dayOfWeek])
+}
+
+enum SlotType {
+  LECTURE
+  LAB
+  TUTORIAL
+  SEMINAR
+}
+
+// ==================== CONSTRAINTS ====================
+
+model Constraint {
+  id          String         @id @default(cuid())
+  type        ConstraintType
+  priority    Priority       @default(MEDIUM)
+  isHard      Boolean        @default(false) // Hard constraints must be satisfied
+  description String?
+  parameters  String         // JSON object with constraint parameters
+  isActive    Boolean        @default(true)
+  createdAt   DateTime       @default(now())
+  updatedAt   DateTime       @updatedAt
+
+  // Optional relations - constraint can apply to any of these
+  createdBy    User       @relation(fields: [createdById], references: [id])
+  createdById  String
+  course       Course?    @relation(fields: [courseId], references: [id])
+  courseId     String?
+  professor    Professor? @relation(fields: [professorId], references: [id])
+  professorId  String?
+  room         Room?      @relation(fields: [roomId], references: [id])
+  roomId       String?
+  studentGroup StudentGroup? @relation(fields: [studentGroupId], references: [id])
+  studentGroupId String?
+}
+
+enum ConstraintType {
+  // Time-based constraints
+  PROFESSOR_UNAVAILABLE
+  ROOM_UNAVAILABLE
+  NO_CLASSES_ON_DAY
+  PREFERRED_TIME_SLOT
+  AVOID_TIME_SLOT
+  
+  // Resource constraints
+  ROOM_CAPACITY
+  ROOM_TYPE_REQUIRED
+  SPECIAL_EQUIPMENT_REQUIRED
+  
+  // Scheduling constraints
+  NO_CONSECUTIVE_CLASSES
+  MAX_CLASSES_PER_DAY
+  MIN_GAP_BETWEEN_CLASSES
+  BACK_TO_BACK_SAME_ROOM
+  
+  // Distribution constraints
+  EVEN_DISTRIBUTION
+  NO_EARLY_MORNING
+  NO_LATE_EVENING
+  LUNCH_BREAK_REQUIRED
+}
+
+enum Priority {
+  LOW
+  MEDIUM
+  HIGH
+  CRITICAL
+}
+
+// ==================== TIME SLOTS CONFIGURATION ====================
+
+model TimeSlotConfig {
+  id        String   @id @default(cuid())
+  name      String   // e.g., "Morning Slot 1"
+  startTime String   // "09:00"
+  endTime   String   // "10:00"
+  duration  Int      // in minutes
+  order     Int      // display order
+  isBreak   Boolean  @default(false)
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+// ==================== GENERATION LOGS ====================
+
+model GenerationLog {
+  id             String   @id @default(cuid())
+  timetableId    String
+  status         String
+  iteration      Int
+  score          Float
+  hardViolations Int
+  softViolations Int
+  message        String?
+  createdAt      DateTime @default(now())
+}
