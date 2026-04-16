@@ -24,37 +24,59 @@ import {
   LayoutDashboard,
   Sparkles,
   GraduationCap,
+  Shield,
+  FileText,
 } from 'lucide-react';
-
-const menuItems = [
-  {
-    title: 'Overview',
-    items: [
-      { title: 'Dashboard', href: '/dashboard', icon: LayoutDashboard },
-      { title: 'Timetables', href: '/dashboard/timetables', icon: Calendar },
-      { title: 'Generate', href: '/dashboard/generate', icon: Sparkles },
-    ],
-  },
-  {
-    title: 'Resources',
-    items: [
-      { title: 'Courses', href: '/dashboard/courses', icon: BookOpen },
-      { title: 'Professors', href: '/dashboard/professors', icon: Users },
-      { title: 'Rooms', href: '/dashboard/rooms', icon: DoorOpen },
-      { title: 'Student Groups', href: '/dashboard/student-groups', icon: GraduationCap },
-    ],
-  },
-  {
-    title: 'Administration',
-    items: [
-      { title: 'Departments', href: '/dashboard/departments', icon: Building2 },
-      { title: 'Settings', href: '/dashboard/settings', icon: Settings },
-    ],
-  },
-];
+import { useAuth, useAvailableActions, roleLabels } from '@/lib/auth';
+import { Badge } from '@/components/ui/badge';
 
 export function DashboardSidebar() {
   const pathname = usePathname();
+  const { profile, isLoading } = useAuth();
+  const actions = useAvailableActions();
+
+  // Build menu items based on permissions
+  const menuItems = [
+    {
+      title: 'Overview',
+      items: [
+        { title: 'Dashboard', href: '/dashboard', icon: LayoutDashboard, show: true },
+        { title: 'Timetables', href: '/dashboard/timetables', icon: Calendar, show: true },
+        { title: 'Generate', href: '/dashboard/generate', icon: Sparkles, show: actions.canCreateTimetables },
+      ],
+    },
+    {
+      title: 'Resources',
+      items: [
+        { title: 'Courses', href: '/dashboard/courses', icon: BookOpen, show: true },
+        { title: 'Professors', href: '/dashboard/professors', icon: Users, show: true },
+        { title: 'Rooms', href: '/dashboard/rooms', icon: DoorOpen, show: true },
+        { title: 'Student Groups', href: '/dashboard/student-groups', icon: GraduationCap, show: true },
+      ],
+    },
+    {
+      title: 'Constraints',
+      items: [
+        { title: 'Constraints', href: '/dashboard/constraints', icon: FileText, show: actions.canCreateConstraints },
+      ],
+    },
+    {
+      title: 'Administration',
+      items: [
+        { title: 'Departments', href: '/dashboard/departments', icon: Building2, show: actions.canManageDepartments },
+        { title: 'User Management', href: '/dashboard/users', icon: Shield, show: actions.canManageUsers },
+        { title: 'Settings', href: '/dashboard/settings', icon: Settings, show: true },
+      ],
+    },
+  ];
+
+  // Filter out empty groups
+  const filteredMenuItems = menuItems
+    .map(group => ({
+      ...group,
+      items: group.items.filter(item => item.show),
+    }))
+    .filter(group => group.items.length > 0);
 
   return (
     <Sidebar>
@@ -67,7 +89,7 @@ export function DashboardSidebar() {
         </Link>
       </SidebarHeader>
       <SidebarContent>
-        {menuItems.map((group) => (
+        {filteredMenuItems.map((group) => (
           <SidebarGroup key={group.title}>
             <SidebarGroupLabel>{group.title}</SidebarGroupLabel>
             <SidebarGroupContent>
@@ -91,15 +113,30 @@ export function DashboardSidebar() {
         ))}
       </SidebarContent>
       <SidebarFooter className="border-t border-border p-4">
-        <div className="flex items-center gap-3">
-          <div className="flex h-9 w-9 items-center justify-center rounded-full bg-primary/10 text-primary">
-            <Users className="h-4 w-4" />
+        {isLoading ? (
+          <div className="h-12 animate-pulse rounded-lg bg-muted" />
+        ) : profile ? (
+          <div className="flex items-center gap-3">
+            <div className="flex h-9 w-9 items-center justify-center rounded-full bg-primary/10 text-primary">
+              <Users className="h-4 w-4" />
+            </div>
+            <div className="flex flex-col min-w-0">
+              <span className="text-sm font-medium text-foreground truncate">
+                {profile.name}
+              </span>
+              <Badge variant="outline" className="text-xs w-fit">
+                {roleLabels[profile.role]}
+              </Badge>
+            </div>
           </div>
-          <div className="flex flex-col">
-            <span className="text-sm font-medium text-foreground">Admin User</span>
-            <span className="text-xs text-muted-foreground">admin@schedulai.com</span>
-          </div>
-        </div>
+        ) : (
+          <Link 
+            href="/auth/login" 
+            className="text-sm text-primary hover:underline"
+          >
+            Sign in to continue
+          </Link>
+        )}
       </SidebarFooter>
     </Sidebar>
   );

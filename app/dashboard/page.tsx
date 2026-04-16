@@ -11,74 +11,114 @@ import {
   Clock,
   CheckCircle2,
 } from 'lucide-react';
+import { createClient } from '@/lib/supabase/server';
 
-const stats = [
-  {
-    title: 'Active Timetables',
-    value: '3',
-    description: 'Currently published',
-    icon: Calendar,
-    color: 'text-primary',
-    bgColor: 'bg-primary/10',
-  },
-  {
-    title: 'Courses',
-    value: '24',
-    description: 'Across all departments',
-    icon: BookOpen,
-    color: 'text-secondary',
-    bgColor: 'bg-secondary/10',
-  },
-  {
-    title: 'Professors',
-    value: '18',
-    description: 'Teaching staff',
-    icon: Users,
-    color: 'text-accent',
-    bgColor: 'bg-accent/10',
-  },
-  {
-    title: 'Rooms',
-    value: '12',
-    description: 'Available venues',
-    icon: DoorOpen,
-    color: 'text-primary',
-    bgColor: 'bg-primary/10',
-  },
-];
+async function getDashboardStats() {
+  const supabase = await createClient();
+  
+  const [timetablesResult, coursesResult, professorsResult, roomsResult] = await Promise.all([
+    supabase.from('timetables').select('id', { count: 'exact' }).eq('is_published', true),
+    supabase.from('courses').select('id', { count: 'exact' }),
+    supabase.from('professors').select('id', { count: 'exact' }),
+    supabase.from('rooms').select('id', { count: 'exact' }).eq('is_available', true),
+  ]);
 
-const recentActivity = [
-  {
-    action: 'Timetable Generated',
-    description: 'Fall 2025 - Computer Science',
-    time: '2 hours ago',
-    icon: Sparkles,
-    status: 'success',
-  },
-  {
-    action: 'Course Added',
-    description: 'CS401 - Machine Learning',
-    time: '5 hours ago',
-    icon: BookOpen,
-    status: 'info',
-  },
-  {
-    action: 'Conflict Resolved',
-    description: 'Room LH-101 double booking',
-    time: '1 day ago',
-    icon: CheckCircle2,
-    status: 'success',
-  },
-  {
-    action: 'Professor Updated',
-    description: 'Dr. Smith availability changed',
-    time: '2 days ago',
-    icon: Users,
-    status: 'info',
-  },
-];
+  return {
+    timetables: timetablesResult.count || 0,
+    courses: coursesResult.count || 0,
+    professors: professorsResult.count || 0,
+    rooms: roomsResult.count || 0,
+  };
+}
 
-export default function DashboardPage() {
+async function getRecentTimetables() {
+  const supabase = await createClient();
+  
+  const { data } = await supabase
+    .from('timetables')
+    .select(`
+      id,
+      name,
+      status,
+      created_at,
+      departments:department_id (name)
+    `)
+    .order('created_at', { ascending: false })
+    .limit(5);
+
+  return data || [];
+}
+
+export default async function DashboardPage() {
+  const stats = await getDashboardStats();
+  const recentTimetables = await getRecentTimetables();
+
+  const statsConfig = [
+    {
+      title: 'Active Timetables',
+      value: stats.timetables.toString(),
+      description: 'Currently published',
+      icon: Calendar,
+      color: 'text-primary',
+      bgColor: 'bg-primary/10',
+    },
+    {
+      title: 'Courses',
+      value: stats.courses.toString(),
+      description: 'Across all departments',
+      icon: BookOpen,
+      color: 'text-secondary',
+      bgColor: 'bg-secondary/10',
+    },
+    {
+      title: 'Professors',
+      value: stats.professors.toString(),
+      description: 'Teaching staff',
+      icon: Users,
+      color: 'text-accent',
+      bgColor: 'bg-accent/10',
+    },
+    {
+      title: 'Rooms',
+      value: stats.rooms.toString(),
+      description: 'Available venues',
+      icon: DoorOpen,
+      color: 'text-primary',
+      bgColor: 'bg-primary/10',
+    },
+  ];
+
+  const recentActivity = [
+    {
+      action: 'Timetable Generated',
+      description: 'Fall 2025 - Computer Science',
+      time: '2 hours ago',
+      icon: Sparkles,
+      status: 'success',
+    },
+    {
+      action: 'Course Added',
+      description: 'CS401 - Machine Learning',
+      time: '5 hours ago',
+      icon: BookOpen,
+      status: 'info',
+    },
+    {
+      action: 'Conflict Resolved',
+      description: 'Room LH-101 double booking',
+      time: '1 day ago',
+      icon: CheckCircle2,
+      status: 'success',
+    },
+    {
+      action: 'Professor Updated',
+      description: 'Dr. Smith availability changed',
+      time: '2 days ago',
+      icon: Users,
+      status: 'info',
+    },
+  ];
+
   return (
     <div className="space-y-8">
       <div className="flex items-center justify-between">
@@ -96,7 +136,7 @@ export default function DashboardPage() {
 
       {/* Stats Grid */}
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-        {stats.map((stat) => (
+        {statsConfig.map((stat) => (
           <Card key={stat.title}>
             <CardHeader className="flex flex-row items-center justify-between pb-2">
               <CardTitle className="text-sm font-medium text-muted-foreground">
@@ -180,6 +220,48 @@ export default function DashboardPage() {
           </CardContent>
         </Card>
       </div>
+
+      {/* Recent Timetables */}
+      {recentTimetables.length > 0 && (
+        <Card>
+          <CardHeader>
+            <CardTitle>Recent Timetables</CardTitle>
+            <CardDescription>Your most recently created schedules</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-3">
+              {recentTimetables.map((timetable) => (
+                <Link 
+                  key={timetable.id} 
+                  href={`/dashboard/timetables/${timetable.id}`}
+                  className="flex items-center justify-between p-3 rounded-lg border hover:bg-muted/50 transition-colors"
+                >
+                  <div className="flex items-center gap-3">
+                    <div className="p-2 rounded-lg bg-primary/10">
+                      <Calendar className="h-4 w-4 text-primary" />
+                    </div>
+                    <div>
+                      <p className="font-medium text-foreground">{timetable.name}</p>
+                      <p className="text-xs text-muted-foreground">
+                        {(timetable.departments as { name: string } | null)?.name || 'Unknown Department'}
+                      </p>
+                    </div>
+                  </div>
+                  <span className={`px-2 py-1 rounded-full text-xs font-medium ${
+                    timetable.status === 'published' 
+                      ? 'bg-accent/10 text-accent' 
+                      : timetable.status === 'generated'
+                      ? 'bg-primary/10 text-primary'
+                      : 'bg-muted text-muted-foreground'
+                  }`}>
+                    {timetable.status}
+                  </span>
+                </Link>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       {/* Performance Card */}
       <Card>
