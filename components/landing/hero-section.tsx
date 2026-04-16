@@ -4,6 +4,7 @@ import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { ArrowRight, Play, Sparkles } from "lucide-react"
 import { TimetablePreview } from "./timetable-preview"
+import Link from "next/link"
 
 export function HeroSection() {
   return (
@@ -39,19 +40,25 @@ export function HeroSection() {
 
           <div className="mt-10 flex flex-col items-center gap-4 sm:flex-row">
             <Button 
+              asChild
               size="lg" 
               className="h-12 bg-primary px-8 text-base font-medium text-primary-foreground shadow-lg shadow-primary/25 transition-all hover:bg-primary/90 hover:shadow-xl hover:shadow-primary/30"
             >
-              Start Generating Free
-              <ArrowRight className="ml-2 h-4 w-4" />
+              <Link href="/auth/sign-up">
+                Start Generating Free
+                <ArrowRight className="ml-2 h-4 w-4" />
+              </Link>
             </Button>
             <Button 
+              asChild
               variant="outline" 
               size="lg" 
               className="h-12 border-border px-8 text-base font-medium text-foreground hover:bg-muted"
             >
-              <Play className="mr-2 h-4 w-4" />
-              Watch Demo
+              <Link href="/auth/login">
+                <Play className="mr-2 h-4 w-4" />
+                Sign In to Dashboard
+              </Link>
             </Button>
           </div>
 

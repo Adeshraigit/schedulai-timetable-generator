@@ -28,17 +28,20 @@ export function Header() {
           <Link href="#benefits" className="text-sm font-medium text-muted-foreground transition-colors hover:text-foreground">
             Benefits
           </Link>
-          <Link href="#pricing" className="text-sm font-medium text-muted-foreground transition-colors hover:text-foreground">
-            Pricing
+          <Link href="/auth/login" className="text-sm font-medium text-muted-foreground transition-colors hover:text-foreground">
+            Login
+          </Link>
+          <Link href="/auth/sign-up" className="text-sm font-medium text-muted-foreground transition-colors hover:text-foreground">
+            Sign Up
           </Link>
         </nav>
 
         <div className="hidden items-center gap-3 md:flex">
-          <Button variant="ghost" className="text-muted-foreground hover:text-foreground">
-            Sign In
+          <Button asChild variant="ghost" className="text-muted-foreground hover:text-foreground">
+            <Link href="/auth/login">Sign In</Link>
           </Button>
-          <Button className="bg-primary text-primary-foreground hover:bg-primary/90">
-            Get Started Free
+          <Button asChild className="bg-primary text-primary-foreground hover:bg-primary/90">
+            <Link href="/auth/sign-up">Get Started Free</Link>
           </Button>
         </div>
 
@@ -80,18 +83,29 @@ export function Header() {
               Benefits
             </Link>
             <Link 
-              href="#pricing" 
+              href="/auth/login" 
               className="text-sm font-medium text-muted-foreground transition-colors hover:text-foreground"
               onClick={() => setMobileMenuOpen(false)}
             >
-              Pricing
+              Login
+            </Link>
+            <Link 
+              href="/auth/sign-up" 
+              className="text-sm font-medium text-muted-foreground transition-colors hover:text-foreground"
+              onClick={() => setMobileMenuOpen(false)}
+            >
+              Sign Up
             </Link>
             <div className="flex flex-col gap-2 pt-4">
-              <Button variant="ghost" className="justify-start text-muted-foreground">
-                Sign In
+              <Button asChild variant="ghost" className="justify-start text-muted-foreground">
+                <Link href="/auth/login" onClick={() => setMobileMenuOpen(false)}>
+                  Sign In
+                </Link>
               </Button>
-              <Button className="bg-primary text-primary-foreground">
-                Get Started Free
+              <Button asChild className="bg-primary text-primary-foreground">
+                <Link href="/auth/sign-up" onClick={() => setMobileMenuOpen(false)}>
+                  Get Started Free
+                </Link>
               </Button>
             </div>
           </nav>
