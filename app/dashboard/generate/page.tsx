@@ -6,6 +6,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { Textarea } from '@/components/ui/textarea';
 import {
   Select,
   SelectContent,
@@ -52,6 +53,9 @@ interface GenerationResult {
   slotsCreated: number;
   generationTime: number;
   conflicts: Array<{ type: string; description: string }>;
+  aiUsed?: boolean;
+  aiApplied?: boolean;
+  aiNotes?: string[];
 }
 
 export default function GeneratePage() {
@@ -62,6 +66,8 @@ export default function GeneratePage() {
   const [maxIterations, setMaxIterations] = useState([500]);
   const [populationSize, setPopulationSize] = useState([50]);
   const [useAdvancedConfig, setUseAdvancedConfig] = useState(false);
+  const [useAiOptimization, setUseAiOptimization] = useState(true);
+  const [aiPrompt, setAiPrompt] = useState('Prioritize reducing hard conflicts and avoid late-evening slots.');
   const [isGenerating, setIsGenerating] = useState(false);
   const [progress, setProgress] = useState(0);
   const [result, setResult] = useState<GenerationResult | null>(null);
@@ -114,6 +120,8 @@ export default function GeneratePage() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
+          useAI: useAiOptimization,
+          aiPrompt,
           config: {
             maxIterations: maxIterations[0],
             populationSize: populationSize[0],
@@ -126,7 +134,10 @@ export default function GeneratePage() {
 
       if (!generateResponse.ok) {
         const errorData = await generateResponse.json();
-        throw new Error(errorData.error || 'Generation failed');
+        const diagnosticText = errorData?.diagnostics
+          ? ` (${JSON.stringify(errorData.diagnostics)})`
+          : '';
+        throw new Error((errorData.error || 'Generation failed') + diagnosticText);
       }
 
       const generationResult = await generateResponse.json();
@@ -226,6 +237,30 @@ export default function GeneratePage() {
                 </p>
               </div>
               <Switch checked={useAdvancedConfig} onCheckedChange={setUseAdvancedConfig} />
+            </div>
+
+            <div className="rounded-lg border border-border p-4 space-y-3">
+              <div className="flex items-center justify-between">
+                <div className="space-y-0.5">
+                  <Label>Groq AI Optimization</Label>
+                  <p className="text-sm text-muted-foreground">
+                    Let Groq tune generation settings before scheduling
+                  </p>
+                </div>
+                <Switch checked={useAiOptimization} onCheckedChange={setUseAiOptimization} />
+              </div>
+              {useAiOptimization && (
+                <div className="space-y-2">
+                  <Label htmlFor="aiPrompt">AI Instructions (optional)</Label>
+                  <Textarea
+                    id="aiPrompt"
+                    value={aiPrompt}
+                    onChange={(e) => setAiPrompt(e.target.value)}
+                    placeholder="Example: Prefer morning labs and reduce back-to-back sessions for first-year groups."
+                    rows={3}
+                  />
+                </div>
+              )}
             </div>
 
             {useAdvancedConfig && (
@@ -333,6 +368,23 @@ export default function GeneratePage() {
                     </>
                   )}
                 </div>
+
+                {result.aiUsed && (
+                  <div className="rounded-lg border border-border p-4">
+                    <p className="text-sm font-medium text-foreground">
+                      AI Optimization: {result.aiApplied ? 'Applied' : 'Requested (no override)'}
+                    </p>
+                    {Array.isArray(result.aiNotes) && result.aiNotes.length > 0 && (
+                      <div className="mt-2 flex flex-wrap gap-2">
+                        {result.aiNotes.map((note) => (
+                          <Badge key={note} variant="secondary">
+                            {note}
+                          </Badge>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                )}
 
                 <div className="grid gap-4 sm:grid-cols-2">
                   <div className="rounded-lg border border-border p-4 text-center">

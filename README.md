@@ -28,7 +28,7 @@ SchedulAI is an intelligent, constraint-based timetable generation system built 
 ## Features
 
 ### Core Functionality
-- **AI-Powered Scheduling**: Uses a genetic algorithm to generate optimal timetables
+- **AI-Powered Scheduling**: Uses a genetic algorithm and optional Groq optimization to generate timetables
 - **Constraint Management**: Hard and soft constraints for complete scheduling control
 - **Multi-Role Support**: Admin, HOD, Professor, and Coordinator roles with specific permissions
 - **Real-Time Validation**: Instant conflict detection and validation
@@ -159,6 +159,12 @@ Fill in your Supabase credentials:
 NEXT_PUBLIC_SUPABASE_URL=https://your-project.supabase.co
 NEXT_PUBLIC_SUPABASE_ANON_KEY=your-anon-key
 SUPABASE_SERVICE_ROLE_KEY=your-service-role-key
+
+# Optional: Groq AI optimization for timetable generation
+GROQ_API_KEY=your-groq-api-key
+# Optional model override (default: llama-3.3-70b-versatile)
+GROQ_MODEL=llama-3.3-70b-versatile
+
 NEXT_PUBLIC_DEV_SUPABASE_REDIRECT_URL=http://localhost:3000
 ```
 
@@ -415,6 +421,10 @@ COORDINATOR
 NEXT_PUBLIC_SUPABASE_URL=https://your-project.supabase.co
 NEXT_PUBLIC_SUPABASE_ANON_KEY=your-anon-key
 SUPABASE_SERVICE_ROLE_KEY=your-service-role-key
+
+# Optional: Groq AI optimization
+GROQ_API_KEY=your-groq-api-key
+GROQ_MODEL=llama-3.3-70b-versatile
 
 # Development only
 NEXT_PUBLIC_DEV_SUPABASE_REDIRECT_URL=http://localhost:3000
