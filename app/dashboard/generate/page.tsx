@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import { useRouter } from 'next/navigation';
 import useSWR from 'swr';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -59,6 +60,7 @@ interface GenerationResult {
 }
 
 export default function GeneratePage() {
+  const router = useRouter();
   const [name, setName] = useState('');
   const [semester, setSemester] = useState('');
   const [academicYear, setAcademicYear] = useState('2025-2026');
@@ -70,6 +72,7 @@ export default function GeneratePage() {
   const [aiPrompt, setAiPrompt] = useState('Prioritize reducing hard conflicts and avoid late-evening slots.');
   const [isGenerating, setIsGenerating] = useState(false);
   const [progress, setProgress] = useState(0);
+  const [generatedTimetableId, setGeneratedTimetableId] = useState<string | null>(null);
   const [result, setResult] = useState<GenerationResult | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -87,6 +90,7 @@ export default function GeneratePage() {
 
     setIsGenerating(true);
     setProgress(0);
+    setGeneratedTimetableId(null);
     setResult(null);
     setError(null);
 
@@ -114,6 +118,7 @@ export default function GeneratePage() {
       }
 
       const timetable = await createResponse.json();
+      setGeneratedTimetableId(timetable.id);
 
       // Then generate the schedule
       const generateResponse = await fetch(`/api/timetables/${timetable.id}/generate`, {
@@ -428,7 +433,15 @@ export default function GeneratePage() {
                   </div>
                 )}
 
-                <Button className="w-full" variant="outline">
+                <Button
+                  className="w-full"
+                  variant="outline"
+                  disabled={!generatedTimetableId}
+                  onClick={() => {
+                    if (!generatedTimetableId) return;
+                    router.push(`/dashboard/timetables/${generatedTimetableId}`);
+                  }}
+                >
                   View Full Timetable
                 </Button>
               </div>
